@@ -1,0 +1,66 @@
+#################################################################################################################################
+###############################################BUAN 381 FINAL PROJECT ROLLING CODE###############################################
+#################################################################################################################################
+
+
+#LOADING LIBRARIES
+library(dplyr)
+
+#LOADING IN DATA
+#df<-read.csv('file/path/BUAN 381 Dataset.csv')
+###df2<-read.csv('https://raw.githubusercontent.com/dikarusli/BUAN-381-Final-Project/BUAN-381-Dataset.csv')
+
+#QUICK DATA ANALYSIS
+View(df)
+colnames(df)
+
+#LIST OF VARS  
+PUBID REGION CENDIV PBA PUBCLIM SQF WKHRS NWKER NGUSED  FKUSED PRUSED SOUSED NGHT1 NGGENR PCTERM WBOARDS FLUOR OCSN DIM MFEXP
+
+
+
+#FRACTION OF DATA TO BE USED AS IN-SAMPLE TRAINING DATA
+pin<-.7 #70% FOR TRAINING (IN-SAMPLE), 30% FOR TESTING (OUT-OF-SAMPLE)
+pout<-0.15
+obs_count<-dim(df)[1]
+
+train_size <- floor(pin * obs_count)
+valid_size <- ceiling(pout * obs_count)
+test_size <- ceiling(pout * obs_count)
+
+#SET THE RANDOM SEED FOR REPRODUCIBILITY
+set.seed(123)
+
+#RANDOMLY SHUFFLES THE ROW NUMBERS OF ORIGINAL DATASET
+train_ind <- sample(obs_count, size = train_size)  # Training indices
+remaining_ind <- setdiff(1:obs_count, train_ind)   # Remaining indices after training
+test_ind <- sample(remaining_ind, size = test_size)  # Testing indices
+valid_ind <- setdiff(remaining_ind, test_ind)  
+
+#PULLING RANDOM ROWS FOR EACH SET
+Train <- df[train_ind, ]
+Test <- df[test_ind, ]
+Valid <- df[valid_ind, ]
+
+#CHECKING THE DIMENSIONS OF THE PARTITIONED DATA
+dim(Train)
+dim(Valid)
+dim(Test)
+
+#######################################
+#####BIVARIATE REGRESSION MODELING#####
+#######################################
+cor(df)
+correlations <- cor(df)
+print(correlations)
+best_var <- names(correlations)[which.max(abs(correlations))]
+View(best_var)
+best_corr <- correlations[which.max(abs(correlations))]
+
+y1 <- df$MFEXP
+y2 <- df$SOUSED
+###MIGHT NEED TO CONVERT 2->0 FOR "NO"
+
+cor(df$SQFT, df$MFEXP)
+View(Train)
+M1 <- lm(MFEXP ~ SQFT, Train)
