@@ -1,0 +1,367 @@
+####################################################
+#################0. PRE DATA STUFF##################
+####################################################
+
+
+#LOADING LIBRARIES
+library(dplyr)
+library(lmridge) #FOR lmridge()
+library(broom) #FOR glance() AND tidy()
+library(MASS) #FOR lm.ridge()
+library(ggplot2) #FOR ggplot()
+library(mgcv) #FOR gam()
+library(rsample) #FOR initial_split() STRATIFIED RANDOM SAMPLING
+library(e1071) #SVM LIBRARY
+
+#LOADING IN DATA
+df0<-read.csv('C:/Users/aandi/OneDrive/Documents/FA 2024/BUAN 381 Predictive Analytics & Big Data/BUAN 381 Final Project/BUAN 381 Dataset.csv')
+df<-read.csv('C:/Users/aandi/OneDrive/Documents/FA 2024/BUAN 381 Predictive Analytics & Big Data/BUAN 381 Final Project/BUAN 381 Dataset.csv')
+
+###df2<-read.csv('https://raw.githubusercontent.com/dikarusli/BUAN-381-Final-Project/BUAN-381-Dataset.csv')
+
+#QUICK DATA ANALYSIS
+View(df)
+colnames(df)
+anyNA(Train)
+
+M0 <- lm(MFEXP~., data =df0)
+cor(df)
+cor(df0)
+#SS VARS: PUBCLIM + SQFT + WKHRS + NKHRS + DIM
+
+summary(M0)
+
+#ADDING NONLINEAR (POLYNOMIAL) FEATURE TRANSFORMATIONS OF SQFT
+df$SQFT2<-df$SQFT^2 #QUADRATIC TRANSFORMATION (2nd ORDER)
+df$SQFT3<-df$SQFT^3
+df$SQFT4<-df$SQFT^4
+df$lnSQFT<-log(df$SQFT+1)
+cor(df$MFEXP, df$lnSQFT)
+View(df)
+
+df$WKHRS2<-df$WKHRS^2 #QUADRATIC TRANSFORMATION (2nd ORDER)
+df$WKHRS3<-df$WKHRS^3
+df$WKHRS4<-df$WKHRS^4
+df$lnWKHRS<-log(df$WKHRS+1)
+cor(df$MFEXP, df$lnWKHRS)
+View(df)
+
+#LIST OF VARS  
+#PUBID REGION CENDIV PBA PUBCLIM SQF WKHRS NWKER NGUSED  FKUSED PRUSED SOUSED NGHT1 NGGENR PCTERM WBOARDS FLUOR OCSN DIM MFEXP
+
+
+#FRACTION OF DATA TO BE USED AS IN-SAMPLE TRAINING DATA
+pin<-.7 #70% FOR TRAINING (IN-SAMPLE), 30% FOR TESTING (OUT-OF-SAMPLE)
+pout<-0.15
+obs_count<-dim(df)[1]
+
+train_size <- floor(pin * obs_count)
+valid_size <- ceiling(pout * obs_count)
+test_size <- ceiling(pout * obs_count)
+
+#SET THE RANDOM SEED FOR REPRODUCIBILITY
+set.seed(123)
+
+#RANDOMLY SHUFFLES THE ROW NUMBERS OF ORIGINAL DATASET
+train_ind <- sample(obs_count, size = train_size)  # Training indices
+remaining_ind <- setdiff(1:obs_count, train_ind)   # Remaining indices after training
+test_ind <- sample(remaining_ind, size = test_size)  # Testing indices
+valid_ind <- setdiff(remaining_ind, test_ind)  
+
+#PULLING RANDOM ROWS FOR EACH SET
+Train <- df[train_ind, ]
+Test <- df[test_ind, ]
+Valid <- df[valid_ind, ]
+
+#CHECKING THE DIMENSIONS OF THE PARTITIONED DATA
+dim(Train)
+dim(Valid)
+dim(Test)
+
+####################################################
+#################2. PRE DATA STUFF##################
+####################################################
+
+#RMSE
+#Num. of SS values
+#ADJR2
+
+####################################################
+###############3. CORRELATION MATRIX################
+####################################################
+cor(df)
+correlations <- cor(df)
+cor(df$MFEXP, df$SQFT)
+cor(df$MFEXP, df$lnSQFT)
+#Highest correlation: SQFT 0.78214998
+
+
+####################################################
+##########4. BIVARIATE REGRESSION MODELING##########
+####################################################
+
+
+
+### 4.a. BUILDING LINEAR MODEL FROM THE TRAINING DATA
+
+#Error Metric: RMSE
+
+#MODEL 1: Y=B0+B1X
+cor(df$SQFT, df$MFEXP)
+View(Train)
+M1 <- lm(MFEXP ~ SQFT, Train)
+summary(M1) #SUMMARY DIAGNOSTIC OUTPUT
+
+#GENERATING PREDICTIONS ON THE TRAINING DATA
+PRED_M1_IN <- predict(M1, Train) 
+View(PRED_M1_IN) #VIEW IN-SAMPLE PREDICTIONS
+View(M1$fitted.values) #FITTED VALUES ARE IN-SAMPLE PREDICTIONS
+
+#GENERATING PREDICTIONS ON THE TEST DATA TO BENCHMARK OUT-OF-SAMPLE PERFORMANCE 
+PRED_M1_OUT <- predict(M1, Valid) 
+View(PRED_1_OUT)
+
+#COMPUTING / REPORTING IN-SAMPLE AND OUT-OF-SAMPLE ROOT MEAN SQUARED ERROR
+(RMSE_M1_IN<-sqrt(sum((PRED_M1_IN-Train$MFEXP)^2)/length(PRED_M1_IN))) #computes in-sample error
+(RMSE_M1_OUT<-sqrt(sum((PRED_M1_OUT-Test$MFEXP)^2)/length(PRED_M1_OUT))) #computes out-of-sample 
+
+#model does a better predicting in sample data
+#NOTE: M1.2 with WKHRS has a better OUT sample
+
+### 4.b. BUILDING A NON-LINEAR MODEL
+M2 <- lm(MFEXP ~ SQFT + SQFT2, Train)
+summary(M2)
+
+PRED_M2_IN <- predict(M2, Train) 
+PRED_M2_OUT <- predict(M2, Valid) 
+(RMSE_M2_IN<-sqrt(sum((PRED_M2_IN-Train$MFEXP)^2)/length(PRED_M2_IN)))
+(RMSE_M2_OUT<-sqrt(sum((PRED_M2_OUT-Test$MFEXP)^2)/length(PRED_M2_OUT)))
+
+### EXTRA TRANSFOMRATIONS
+# M3 <- lm(MFEXP ~ SQFT + SQFT2 + SQFT3, Train)
+# summary(M3)
+# 
+# PRED_M3_IN <- predict(M3, Train) 
+# PRED_M3_OUT <- predict(M3, Valid) 
+# (RMSE_M3_IN<-sqrt(sum((PRED_M3_IN-Train$MFEXP)^2)/length(PRED_M3_IN)))
+# (RMSE_M3_OUT<-sqrt(sum((PRED_M3_OUT-Test$MFEXP)^2)/length(PRED_M3_OUT)))
+ 
+# M4 <- lm(MFEXP ~ SQFT + SQFT2 + SQFT3 + SQFT4, Train)
+# PRED_M4_IN <- predict(M4, Train) 
+# PRED_M4_OUT <- predict(M4, Valid) 
+# (RMSE_M4_IN<-sqrt(sum((PRED_M4_IN-Train$MFEXP)^2)/length(PRED_M4_IN)))
+# (RMSE_M4_OUT<-sqrt(sum((PRED_M4_OUT-Test$MFEXP)^2)/length(PRED_M4_OUT)))
+
+
+### 4.c. REGULARIZED MODEL
+#BUILDING REG vs. UNREG MODELS FOR 2nd DEG POLY MODEL (M2)
+M2_unreg<-lm(MFEXP~SQFT + SQFT2,df) #BUILD UNREGULARIZE MODEL AS POINT OF COMPARISION
+M2_reg<-lm.ridge(MFEXP~SQFT + SQFT2, Train, lambda=seq(0,1,0.1)) #BUILD REGULARIZED MODEL
+glance(M2_reg) #USING BROOM PACKAGE TO EXRACT OPTIMAL LAMBDA
+
+#ADDITIONAL TUNING
+M2_reg<-lm.ridge(MFEXP~SQFT + SQFT2, Train, lambda=seq(0,2,0.01)) #BUILD REGULARIZED MODEL
+glance(M2_reg) #USING BROOM PACKAGE TO EXRACT OPTIMAL LAMBDA
+
+#DIAGNOSTIC OUTPUT
+summary_M2_reg <- tidy(M2_reg)
+head(summary_M2_reg,10)
+
+plot(M2_reg)
+ggplot(summary_reg, aes(lambda, estimate, color=term)) +
+  geom_line()
+
+?ggplot
+
+
+
+#ggplot2### QUASI POISSON ###
+# mean(Train$SQFT) #CHECK THE MEAN
+# var(Train$SQFT) #CHECK THE VARIANCE
+# M5 <- gam(MFEXP ~ SQFT, data = Train, family = 'quasipoisson')
+# summary(M5) #generates summary diagnostic output
+
+# PRED_M5_IN <- predict(M5, Train) 
+# PRED_M5_OUT <- predict(M5, Valid)
+# (RMSE_M5_IN<-sqrt(sum((PRED_M5_IN-Train$MFEXP)^2)/length(PRED_M5_IN)))
+# (RMSE_M5_OUT<-sqrt(sum((PRED_M5_OUT-Test$MFEXP)^2)/length(PRED_M5_OUT)))
+
+
+#4.d. GENERALIZED ADDITIVE STRUCTURE - SPLINE
+M6 <- gam(MFEXP ~ s(SQFT), data = Train, family = 'gaussian')
+summary(M6)
+
+PRED_M6_IN <- predict(M6, Train) 
+PRED_M6_OUT <- predict(M6, Valid)
+(RMSE_M6_IN<-sqrt(sum((PRED_M6_IN-Train$MFEXP)^2)/length(PRED_M6_IN)))
+(RMSE_M6_OUT<-sqrt(sum((PRED_M6_OUT-Test$MFEXP)^2)/length(PRED_M6_OUT)))
+
+
+### 4.e.BIVARIATE PLOT
+x_min <-min(Train$SQFT)
+x_max <-max(Train$SQFT)
+x_grid <- seq(x_min,x_max,length.out = 100) #CREATES GRID OF X-AXIS VALUES
+
+plot(Train$MFEXP ~ Train$SQFT, col='blue')
+
+optimal_lambda <- which.min(M2_reg$GCV)
+print(optimal_lambda)
+
+coef_ridge <- coef(M2_reg)[optimal_lambda,]
+print(coef_ridge)
+
+predictions_1 <- predict(M1, list(SQFT=x_grid))
+predictions_2 <- predict(M2, list(SQFT=x_grid, SQFT2=(x_grid^2)))
+#predictions_5 <- predict(M2_reg, list(SQFT=x_grid, SQFT2=x_grid^2))
+predictions_5 <- (coef_ridge[1] + coef_ridge[2] * x_grid + coef_ridge[3] * (x_grid^2))
+predictions_6 <- predict(M6, data.frame(SQFT = x_grid))
+
+lines(x_grid, predictions_1, col='blue', lwd=3) #PLOTS M1
+lines(x_grid, predictions_2, col='yellow', lwd=3) #PLOTS M2
+lines(x_grid, predictions_5, col='green', lwd=3) #PLOTS M2_reg
+lines(x_grid, predictions_6, col='purple', lwd=3) #PLOTS M6
+points(Valid$MFEXP ~ Valid$SQFT, col='red', pch=3, cex=.5)
+
+### 4.f. RMSE IN AND OUT ERROR
+PRED_M1_IN <- predict(M1, Train) 
+PRED_M1_OUT <- predict(M1, Valid) 
+(RMSE_M1_IN<-sqrt(sum((PRED_M1_IN-Train$MFEXP)^2)/length(PRED_M1_IN)))
+(RMSE_M1_OUT<-sqrt(sum((PRED_M1_OUT-Test$MFEXP)^2)/length(PRED_M1_OUT)))
+
+PRED_M2_IN <- predict(M2, Train) 
+PRED_M2_OUT <- predict(M2, Valid) 
+(RMSE_M2_IN<-sqrt(sum((PRED_M2_IN-Train$MFEXP)^2)/length(PRED_M2_IN)))
+(RMSE_M2_OUT<-sqrt(sum((PRED_M2_OUT-Test$MFEXP)^2)/length(PRED_M2_OUT)))
+
+PRED_M2_reg_IN <- predict(M2_reg, Train)
+PRED_M2_reg_OUT <- predict(M2_reg, Valid)
+(RMSE_M2_reg_IN<-sqrt(sum((PRED_M2_reg_IN-Train$MFEXP)^2)/length(PRED_M2_reg_IN)))
+(RMSE_M2_reg_OUT<-sqrt(sum((PRED_M2_reg_OUT-Test$MFEXP)^2)/length(PRED_M2_reg_OUT)))
+
+PRED_M3_IN <- predict(M3, Train)
+PRED_M3_OUT <- predict(M3, Valid)
+(RMSE_M3_IN<-sqrt(sum((PRED_M3_IN-Train$MFEXP)^2)/length(PRED_M3_IN)))
+(RMSE_M3_OUT<-sqrt(sum((PRED_M3_OUT-Test$MFEXP)^2)/length(PRED_M3_OUT)))
+
+PRED_M4_IN <- predict(M4, Train)
+PRED_M4_OUT <- predict(M4, Valid)
+(RMSE_M4_IN<-sqrt(sum((PRED_M4_IN-Train$MFEXP)^2)/length(PRED_M4_IN)))
+(RMSE_M4_OUT<-sqrt(sum((PRED_M4_OUT-Test$MFEXP)^2)/length(PRED_M4_OUT)))
+
+PRED_M5_IN <- predict(M5, Train)
+PRED_M5_OUT <- predict(M5, Valid)
+(RMSE_M5_IN<-sqrt(sum((PRED_M5_IN-Train$MFEXP)^2)/length(PRED_M5_IN)))
+(RMSE_M5_OUT<-sqrt(sum((PRED_M5_OUT-Test$MFEXP)^2)/length(PRED_M5_OUT)))
+
+PRED_M6_IN <- predict(M6, Train) 
+PRED_M6_OUT <- predict(M6, Valid)
+(RMSE_M6_IN<-sqrt(sum((PRED_M6_IN-Train$MFEXP)^2)/length(PRED_M6_IN)))
+(RMSE_M6_OUT<-sqrt(sum((PRED_M6_OUT-Test$MFEXP)^2)/length(PRED_M6_OUT)))
+
+TABLE_VAL_1 <- as.table(matrix(c(RMSE_M1_IN, RMSE_M2_IN, RMSE_M3_IN, RMSE_M4_IN, RMSE_M5_IN, RMSE_M6_IN, RMSE_M1_OUT, RMSE_M2_OUT, RMSE_M3_OUT, RMSE_M4_OUT, RMSE_M5_IN, RMSE_M6_OUT), ncol=6, byrow=TRUE))
+colnames(TABLE_VAL_1) <- c('LINEAR', 'QUADRATIC', 'CUBIC', '4th ORDER','QUASIPOISSON', 'GAMS')
+rownames(TABLE_VAL_1) <- c('RMSE_IN', 'RMSE_OUT')
+TABLE_VAL_1 #REPORT OUT-OF-SAMPLE ERRORS FOR BOTH HYPOTHESIS
+
+
+####################################################
+########5. MULTIVARIATE REGRESSION MODELING#########
+####################################################
+
+### 5.a. MULTIVARIATE LINEAR MODEL
+correlations
+M7 <- lm(MFEXP ~ PUBCLIM + SQFT + WKHRS + NWKER, Train)
+summary(M7)
+
+PRED_M7_IN <- predict(M7, Train) 
+PRED_M7_OUT <- predict(M7, Valid)
+(RMSE_M7_IN<-sqrt(sum((PRED_M7_IN-Train$MFEXP)^2)/length(PRED_M7_IN)))
+(RMSE_M7_OUT<-sqrt(sum((PRED_M7_OUT-Test$MFEXP)^2)/length(PRED_M7_OUT)))
+
+
+### 5.b. REGULARIZATION
+#BUILDING REG vs. UNREG MODELS FOR 2nd DEG POLY MODEL (M2)
+M8 <- lm.ridge(MFEXP ~ PUBCLIM + SQFT + WKHRS + NWKER, Train, lambda=seq(0,10,0.1)) #BUILD REGULARIZED MODEL
+glance(M8) #USING BROOM PACKAGE TO EXRACT OPTIMAL LAMBDA
+
+### 5.c. MULTIVARIATE NONLINEAR MODEL
+M9 <- lm(MFEXP ~ PUBCLIM + SQFT + WKHRS + NWKER + I(SQFT^2) + I(SQFT^3) + I(SQFT^3) + + I(SQFT^4), Train)
+summary(M9)
+
+PRED_M9_IN <- predict(M9, Train) 
+PRED_M9_OUT <- predict(M9, Valid)
+(RMSE_M9_IN<-sqrt(sum((PRED_M9_IN-Train$MFEXP)^2)/length(PRED_M9_IN)))
+(RMSE_M9_OUT<-sqrt(sum((PRED_M9_OUT-Test$MFEXP)^2)/length(PRED_M9_OUT)))
+
+set.seed(123)
+
+######ABOUT KERNELS FOR SVM CLASSIFIERS:######
+#Let the linear signal be defined in the usual
+#way as s=B1x1+...+Bkxk.  The kernels that can
+#be used to capture nonlinear transformations
+#are below:
+#linear kernel (s): "linear"
+#polynomial (gamma*s+coef0)^p : "polynomial"
+#gaussian RBF (exp(-gamma*|u-v|^2)): "radial"
+#sigmoid (tanh(gamma*s+coef0)): "sigmoid"
+##############################################
+
+kern_type<-"linear" #SPECIFY KERNEL TYPE
+
+#BUILD SVM CLASSIFIER
+#VARS - PUBCLIM + SQFT + WKHRS + NWKER + I(SQFT^2) + I(SQFT^3)
+
+SVM_Model<- svm(MFEXP ~ ., 
+                data = Train, 
+                type = "eps-regression", #set to "eps-regression" for numeric prediction
+                kernel = kern_type,
+                cost=1,                   #REGULARIZATION PARAMETER
+                gamma = 1/(ncol(Train)-1), #DEFAULT KERNEL PARAMETER
+                coef0 = 0,                    #DEFAULT KERNEL PARAMETER
+                degree=2,                     #POLYNOMIAL KERNEL PARAMETER
+                scale = TRUE)                #RESCALE DATA? (SET TO TRUE TO NORMALIZE)
+
+print(SVM_Model) #DIAGNOSTIC SUMMARY
+
+#REPORT IN AND OUT-OF-SAMPLE ERRORS (1-ACCURACY)
+(E_IN_PRETUNE<-1-mean(predict(SVM_Model, Train)==Train$MFEXP))
+(E_OUT_PRETUNE<-1-mean(predict(SVM_Model, Valid)==Valid$MFEXP))
+
+
+#TUNING THE SVM BY CROSS-VALIDATION
+tune_control<-tune.control(cross=10) #SET K-FOLD CV PARAMETERS
+set.seed(123)
+TUNE <- tune.svm(x = Train[,-c(20)],
+                 y = Train[, "MFEXP"],
+                 type = "eps-regression",
+                 kernel = kern_type,
+                 tunecontrol=tune_control,
+                 cost=c(.01, .1, 1, 10, 100, 1000), #REGULARIZATION PARAMETER
+                 gamma = 1/(ncol(Train)-1), #KERNEL PARAMETER
+                 coef0 = 0,           #KERNEL PARAMETER
+                 degree = 2)          #POLYNOMIAL KERNEL PARAMETER
+
+print(TUNE) #OPTIMAL TUNING PARAMETERS FROM VALIDATION PROCEDURE
+
+#RE-BUILD MODEL USING OPTIMAL TUNING PARAMETERS
+SVM_Retune<- svm(MFEXP ~ ., 
+                 data = Train, 
+                 type = "eps-regression", 
+                 kernel = kern_type,
+                 degree = TUNE$best.parameters$degree,
+                 gamma = TUNE$best.parameters$gamma,
+                 coef0 = TUNE$best.parameters$coef0,
+                 cost = TUNE$best.parameters$cost,
+                 scale = FALSE)
+print(SVM_Model) #DIAGNOSTIC SUMMARY
+print(TUNE)
+print(SVM_Retune) #DIAGNOSTIC SUMMARY
+
+#REPORT IN AND OUT-OF-SAMPLE ERRORS (1-ACCURACY) ON RETUNED MODEL
+(E_IN_RETUNE<-1-mean(predict(SVM_Retune, training)==training$admit))
+(E_OUT_RETUNE<-1-mean(predict(SVM_Retune, test)==test$admit))
+
+
+
+# plot(M7$residuals ~M7[1], main = "Residual Plot")
+# abline(h = 0, col = "red")
