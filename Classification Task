@@ -410,3 +410,107 @@ performance_summary <- data.frame(
 
 print("Performance Summary:")
 print(performance_summary)
+
+# LOAD REQUIRED LIBRARIES
+library(dplyr)
+library(rsample)
+library(rpart)
+library(rpart.plot)
+library(pROC)
+
+# LOADING DATA
+df <- read.csv('https://raw.githubusercontent.com/dikarusli/BUAN-381-Final-Project/refs/heads/main/BUAN-381-Dataset.csv')
+
+# STRATIFIED SAMPLING BASED ON SOUSED
+set.seed(123)
+split <- initial_split(df, prop = 0.7, strata = SOUSED)  # Stratified split with 70% for training
+Train <- training(split)
+Temp <- testing(split)  # Remaining 30% for validation and testing
+
+# Splitting Temp into Validation and Test (50% each)
+set.seed(123)
+temp_split <- initial_split(Temp, prop = 0.5, strata = SOUSED)
+Valid <- training(temp_split)
+Test <- testing(temp_split)
+
+# Ensure SOUSED is treated as a factor for classification tasks
+Train$SOUSED <- as.factor(Train$SOUSED)
+Valid$SOUSED <- as.factor(Valid$SOUSED)
+Test$SOUSED <- as.factor(Test$SOUSED)
+
+# CHECK DIMENSIONS OF DATASETS
+print(dim(Train))
+print(dim(Valid))
+print(dim(Test))
+
+# TRAIN A CLASSIFICATION TREE
+tree_model <- rpart(SOUSED ~ ., data = Train, method = "class")
+
+# VISUALIZE THE TREE
+rpart.plot(tree_model, main = "Classification Tree")
+
+# PREDICT ON VALIDATION SET
+tree_valid_pred <- predict(tree_model, newdata = Valid, type = "prob")
+tree_valid_probs <- tree_valid_pred[, 2]  # Probabilities for the positive class
+tree_valid_pred_classes <- ifelse(tree_valid_probs > 0.5, 1, 0)
+
+# CONFUSION MATRIX FOR VALIDATION SET
+tree_valid_conf_matrix <- table(Valid$SOUSED, tree_valid_pred_classes)
+print("Confusion Matrix - Tree (Validation Set):")
+print(tree_valid_conf_matrix)
+
+# VALIDATION ACCURACY
+tree_valid_accuracy <- sum(diag(tree_valid_conf_matrix)) / sum(tree_valid_conf_matrix)
+print(paste("Tree Validation Accuracy:", round(tree_valid_accuracy, 4)))
+
+# VALIDATION AUC
+tree_valid_roc <- roc(Valid$SOUSED, tree_valid_probs)
+plot(tree_valid_roc, main = "ROC Curve for Classification Tree (Validation Set)", col = "orange", lwd = 2, print.auc = TRUE)
+tree_valid_auc <- auc(tree_valid_roc)
+print(paste("Tree Validation AUC:", round(tree_valid_auc, 4)))
+
+# PREDICT ON TEST SET
+tree_test_pred <- predict(tree_model, newdata = Test, type = "prob")
+tree_test_probs <- tree_test_pred[, 2]  # Probabilities for the positive class
+tree_test_pred_classes <- ifelse(tree_test_probs > 0.5, 1, 0)
+
+# CONFUSION MATRIX FOR TEST SET
+tree_test_conf_matrix <- table(Test$SOUSED, tree_test_pred_classes)
+print("Confusion Matrix - Tree (Test Set):")
+print(tree_test_conf_matrix)
+
+# TEST ACCURACY
+tree_test_accuracy <- sum(diag(tree_test_conf_matrix)) / sum(tree_test_conf_matrix)
+print(paste("Tree Test Accuracy:", round(tree_test_accuracy, 4)))
+
+# TEST AUC
+tree_test_roc <- roc(Test$SOUSED, tree_test_probs)
+plot(tree_test_roc, main = "ROC Curve for Classification Tree (Test Set)", col = "orange", lwd = 2, print.auc = TRUE)
+tree_test_auc <- auc(tree_test_roc)
+print(paste("Tree Test AUC:", round(tree_test_auc, 4)))
+
+# INITIALIZE PERFORMANCE SUMMARY
+performance_summary <- data.frame(
+  Model = character(),
+  Validation_Accuracy = numeric(),
+  Validation_AUC = numeric(),
+  Test_Accuracy = numeric(),
+  Test_AUC = numeric(),
+  stringsAsFactors = FALSE
+)
+
+# ADD CLASSIFICATION TREE RESULTS TO PERFORMANCE SUMMARY
+performance_summary <- rbind(
+  performance_summary,
+  data.frame(
+    Model = "Classification Tree",
+    Validation_Accuracy = tree_valid_accuracy,
+    Validation_AUC = tree_valid_auc,
+    Test_Accuracy = tree_test_accuracy,
+    Test_AUC = tree_test_auc
+  )
+)
+
+# PRINT UPDATED PERFORMANCE SUMMARY
+print("Updated Performance Summary:")
+print(performance_summary)
