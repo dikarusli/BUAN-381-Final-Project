@@ -1,0 +1,520 @@
+#LOADING LIBRARIES
+library(dplyr)
+library(lmridge) #FOR lmridge()
+library(broom) #FOR glance() AND tidy()
+library(MASS) #FOR lm.ridge()
+library(ggplot2) #FOR ggplot()
+library(mgcv) #FOR gam()
+library(rsample) #FOR initial_split() STRATIFIED RANDOM SAMPLING
+library(e1071) #SVM LIBRARY
+
+#LOADING IN DATA
+df<-read.csv('https://raw.githubusercontent.com/dikarusli/BUAN-381-Final-Project/refs/heads/main/BUAN-381-Dataset.csv')
+# 
+# #QUICK DATA ANALYSIS
+# View(df)
+# colnames(df)
+# anyNA(df)
+# 
+# M1 <- lm(SOUSED~., data = df)
+# 
+# cor(df)
+# #HIGHLY CORRELATED VARS: SQFT + NKWER
+# #CORRELATED VARS: WKHRS
+# 
+# summary(M1)
+# #SS VARS: (Intercept) + PUBCLIM + SQFT + WKHRS + NKHRS + DIM
+# 
+# #FRACTION OF DATA TO BE USED AS IN-SAMPLE TRAINING DATA
+# pin<-.7 #70% FOR TRAINING (IN-SAMPLE), 30% FOR TESTING (OUT-OF-SAMPLE)
+# pout<-0.15
+# obs_count<-dim(df)[1]
+# 
+# train_size <- ceiling(pin * obs_count)
+# valid_size <- floor(pout * obs_count)
+# test_size <- floor(pout * obs_count)
+# 
+# #SET THE RANDOM SEED FOR REPRODUCIBILITY
+# set.seed(123)
+# 
+# #RANDOMLY SHUFFLES THE ROW NUMBERS OF ORIGINAL DATASET
+# train_ind <- sample(obs_count, size = train_size)  # Training indices
+# remaining_ind <- setdiff(1:obs_count, train_ind)   # Remaining indices after training
+# test_ind <- sample(remaining_ind, size = test_size)  # Testing indices
+# valid_ind <- setdiff(remaining_ind, test_ind)  
+# 
+# #PULLING RANDOM ROWS FOR EACH SET
+# Train <- df[train_ind, ]
+# Test <- df[test_ind, ]
+# Valid <- df[valid_ind, ]
+# 
+# #CHECKING THE DIMENSIONS OF THE PARTITIONED DATA
+# dim(Train)
+# dim(Valid)
+# dim(Test)
+
+# STRATIFIED SAMPLING BASED ON SOUSED
+set.seed(123)
+split <- initial_split(df, prop = 656/936, strata = SOUSED)  # Stratified split with 70% for training
+Train <- training(split)
+Temp <- testing(split)
+
+# Further split the Test dataset into Valid and Test
+test_split <- initial_split(Temp, prop = 0.5, strata = SOUSED)
+Valid <- training(test_split)
+Test <- testing(test_split)
+
+# CHECK DIMENSIONS OF PARTITIONED DATA
+dim(Train)
+dim(Test)
+dim(Valid)
+
+# ESTIMATE LOGISTIC REGRESSION MODEL (LOGIT)
+logit_model <- glm(SOUSED ~ ., data = Train, family = binomial)
+
+# SUMMARY OF THE LOGIT MODEL
+summary(logit_model)
+
+# PREDICT PROBABILITIES ON VALIDATION SET
+valid_predictions <- predict(logit_model, newdata = Valid, type = "response")
+
+# CONVERT PROBABILITIES TO BINARY OUTCOMES USING THRESHOLD
+valid_predicted_classes <- ifelse(valid_predictions > 0.5, 1, 0)
+
+# CONFUSION MATRIX FOR VALIDATION SET
+conf_matrix <- table(Valid$SOUSED, valid_predicted_classes)
+print(conf_matrix)
+
+# ACCURACY METRIC FOR VALIDATION SET
+accuracy <- sum(diag(conf_matrix)) / sum(conf_matrix)
+print(paste("Validation Accuracy:", accuracy))
+
+# LOAD pROC LIBRARY
+library(pROC)
+
+# GENERATE ROC CURVE FOR LOGIT MODEL
+roc_obj <- roc(Valid$SOUSED, valid_predictions)
+
+# PLOT THE ROC CURVE
+plot(roc_obj, main = "ROC Curve for Logistic Regression (Logit)",
+     col = "blue", lwd = 2, print.auc = TRUE)
+
+# CALCULATE AUC
+auc_value <- auc(roc_obj)
+print(paste("Validation AUC:", auc_value))
+
+# ESTIMATE PROBIT MODEL
+probit_model <- glm(SOUSED ~ ., data = Train, family = binomial(link = "probit"))
+
+# SUMMARY OF PROBIT MODEL
+summary(probit_model)
+
+# PREDICT PROBABILITIES ON VALIDATION SET USING PROBIT MODEL
+probit_predictions <- predict(probit_model, newdata = Valid, type = "response")
+
+# CONVERT PROBABILITIES TO BINARY OUTCOMES USING THRESHOLD (e.g., 0.5)
+probit_predicted_classes <- ifelse(probit_predictions > 0.5, 1, 0)
+
+# CONFUSION MATRIX FOR PROBIT MODEL
+probit_conf_matrix <- table(Valid$SOUSED, probit_predicted_classes)
+print(probit_conf_matrix)
+
+# ACCURACY METRIC FOR PROBIT MODEL
+probit_accuracy <- sum(diag(probit_conf_matrix)) / sum(probit_conf_matrix)
+print(paste("Probit Validation Accuracy:", probit_accuracy))
+
+# GENERATE ROC CURVE FOR PROBIT MODEL
+library(pROC)
+probit_roc_obj <- roc(Valid$SOUSED, probit_predictions)
+
+# PLOT THE ROC CURVE FOR PROBIT MODEL
+plot(probit_roc_obj, main = "ROC Curve for Probit Model",
+     col = "red", lwd = 2, print.auc = TRUE)
+
+# CALCULATE AUC FOR PROBIT MODEL
+probit_auc_value <- auc(probit_roc_obj)
+print(paste("Probit Validation AUC:", probit_auc_value))
+
+# LOGISTIC REGRESSION (LOGIT) OUT-OF-SAMPLE PERFORMANCE
+
+# PREDICT PROBABILITIES ON TEST SET USING LOGIT MODEL
+logit_test_predictions <- predict(logit_model, newdata = Test, type = "response")
+
+# CONVERT PROBABILITIES TO BINARY OUTCOMES
+logit_test_predicted_classes <- ifelse(logit_test_predictions > 0.5, 1, 0)
+
+# CONFUSION MATRIX FOR LOGIT MODEL (TEST SET)
+logit_test_conf_matrix <- table(Test$SOUSED, logit_test_predicted_classes)
+print("Confusion Matrix - Logit (Test Set):")
+print(logit_test_conf_matrix)
+
+# ACCURACY FOR LOGIT MODEL (TEST SET)
+logit_test_accuracy <- sum(diag(logit_test_conf_matrix)) / sum(logit_test_conf_matrix)
+print(paste("Logit Test Accuracy:", logit_test_accuracy))
+
+# ROC CURVE AND AUC FOR LOGIT MODEL (TEST SET)
+logit_test_roc <- roc(Test$SOUSED, logit_test_predictions)
+plot(logit_test_roc, main = "ROC Curve for Logit Model (Test Set)", col = "blue", lwd = 2, print.auc = TRUE)
+logit_test_auc <- auc(logit_test_roc)
+print(paste("Logit Test AUC:", logit_test_auc))
+
+# PROBIT MODEL OUT-OF-SAMPLE PERFORMANCE
+
+# PREDICT PROBABILITIES ON TEST SET USING PROBIT MODEL
+probit_test_predictions <- predict(probit_model, newdata = Test, type = "response")
+
+# CONVERT PROBABILITIES TO BINARY OUTCOMES
+probit_test_predicted_classes <- ifelse(probit_test_predictions > 0.5, 1, 0)
+
+# CONFUSION MATRIX FOR PROBIT MODEL (TEST SET)
+probit_test_conf_matrix <- table(Test$SOUSED, probit_test_predicted_classes)
+print("Confusion Matrix - Probit (Test Set):")
+print(probit_test_conf_matrix)
+
+# ACCURACY FOR PROBIT MODEL (TEST SET)
+probit_test_accuracy <- sum(diag(probit_test_conf_matrix)) / sum(probit_test_conf_matrix)
+print(paste("Probit Test Accuracy:", probit_test_accuracy))
+
+# ROC CURVE AND AUC FOR PROBIT MODEL (TEST SET)
+probit_test_roc <- roc(Test$SOUSED, probit_test_predictions)
+plot(probit_test_roc, main = "ROC Curve for Probit Model (Test Set)", col = "red", lwd = 2, print.auc = TRUE)
+probit_test_auc <- auc(probit_test_roc)
+print(paste("Probit Test AUC:", probit_test_auc))
+
+# LOAD REQUIRED LIBRARIES (Ensure all necessary libraries are loaded)
+library(e1071)  # For SVM
+library(pROC)   # For AUC calculations
+
+# 1. TRAIN THE SVM MODEL
+
+# Convert the target variable to factor for classification
+Train$SOUSED <- as.factor(Train$SOUSED)
+Valid$SOUSED <- as.factor(Valid$SOUSED)
+Test$SOUSED <- as.factor(Test$SOUSED)
+
+# Print the levels to ensure they are consistent and exactly two
+print("Levels in Training Set SOUSED:")
+print(levels(Train$SOUSED))
+
+print("Levels in Validation Set SOUSED:")
+print(levels(Valid$SOUSED))
+
+print("Levels in Test Set SOUSED:")
+print(levels(Test$SOUSED))
+
+# Ensure that both training and validation sets have exactly two levels
+if(length(levels(Train$SOUSED)) != 2){
+  stop("Training set 'SOUSED' does not have exactly two levels.")
+}
+if(length(levels(Valid$SOUSED)) != 2){
+  stop("Validation set 'SOUSED' does not have exactly two levels.")
+}
+if(length(levels(Test$SOUSED)) != 2){
+  stop("Test set 'SOUSED' does not have exactly two levels.")
+}
+
+# Train SVM with default parameters and probability estimates
+svm_model <- svm(SOUSED ~ ., data = Train, probability = TRUE)
+
+# 2. PREDICT AND EVALUATE ON VALIDATION SET
+
+# Predict probabilities on validation set
+svm_valid_pred <- predict(svm_model, newdata = Valid, probability = TRUE)
+svm_valid_probs_attr <- attr(svm_valid_pred, "probabilities")
+
+# Print probability column names
+print("Probability Column Names (Validation Set):")
+print(colnames(svm_valid_probs_attr))
+
+# Determine the positive class (assuming the second level is the positive class)
+positive_class <- levels(Train$SOUSED)[2]
+print(paste("Positive Class:", positive_class))
+
+# Extract probabilities for the positive class
+if(positive_class %in% colnames(svm_valid_probs_attr)){
+  svm_valid_probs <- svm_valid_probs_attr[, positive_class]
+} else {
+  stop(paste("Positive class", positive_class, "not found in probability columns."))
+}
+
+# Check for NA probabilities
+if(any(is.na(svm_valid_probs))){
+  warning("NA values found in SVM validation probabilities.")
+}
+
+# Convert probabilities to binary outcomes with threshold 0.5
+svm_valid_pred_classes <- ifelse(svm_valid_probs > 0.5, positive_class, levels(Train$SOUSED)[1])
+
+# Ensure that 'svm_valid_pred_classes' is a factor with the same levels as 'SOUSED'
+svm_valid_pred_classes <- factor(svm_valid_pred_classes, levels = levels(Valid$SOUSED))
+
+# Confusion Matrix
+svm_valid_conf_matrix <- table(Actual = Valid$SOUSED, Predicted = svm_valid_pred_classes)
+print("Confusion Matrix - SVM (Validation Set):")
+print(svm_valid_conf_matrix)
+
+# Accuracy
+svm_valid_accuracy <- sum(diag(svm_valid_conf_matrix)) / sum(svm_valid_conf_matrix)
+print(paste("SVM Validation Accuracy:", round(svm_valid_accuracy, 4)))
+
+# AUC
+svm_valid_roc <- roc(response = Valid$SOUSED, predictor = svm_valid_probs, levels = rev(levels(Valid$SOUSED)))
+plot(svm_valid_roc, main = "ROC Curve for SVM (Validation Set)", col = "green", lwd = 2, print.auc = TRUE)
+svm_valid_auc <- auc(svm_valid_roc)
+print(paste("SVM Validation AUC:", round(svm_valid_auc, 4)))
+
+# 3. PREDICT AND EVALUATE ON TEST SET
+
+# Predict probabilities on test set
+svm_test_pred <- predict(svm_model, newdata = Test, probability = TRUE)
+svm_test_probs_attr <- attr(svm_test_pred, "probabilities")
+
+# Print probability column names
+print("Probability Column Names (Test Set):")
+print(colnames(svm_test_probs_attr))
+
+# Extract probabilities for the positive class
+if(positive_class %in% colnames(svm_test_probs_attr)){
+  svm_test_probs <- svm_test_probs_attr[, positive_class]
+} else {
+  stop(paste("Positive class", positive_class, "not found in test probability columns."))
+}
+
+# Check for NA probabilities
+if(any(is.na(svm_test_probs))){
+  warning("NA values found in SVM test probabilities.")
+}
+
+# Convert probabilities to binary outcomes with threshold 0.5
+svm_test_pred_classes <- ifelse(svm_test_probs > 0.5, positive_class, levels(Train$SOUSED)[1])
+
+# Ensure that 'svm_test_pred_classes' is a factor with the same levels as 'SOUSED'
+svm_test_pred_classes <- factor(svm_test_pred_classes, levels = levels(Test$SOUSED))
+
+# Confusion Matrix
+svm_test_conf_matrix <- table(Actual = Test$SOUSED, Predicted = svm_test_pred_classes)
+print("Confusion Matrix - SVM (Test Set):")
+print(svm_test_conf_matrix)
+
+# Accuracy
+svm_test_accuracy <- sum(diag(svm_test_conf_matrix)) / sum(svm_test_conf_matrix)
+print(paste("SVM Test Accuracy:", round(svm_test_accuracy, 4)))
+
+# AUC
+svm_test_roc <- roc(response = Test$SOUSED, predictor = svm_test_probs, levels = rev(levels(Test$SOUSED)))
+plot(svm_test_roc, main = "ROC Curve for SVM (Test Set)", col = "green", lwd = 2, print.auc = TRUE)
+svm_test_auc <- auc(svm_test_roc)
+print(paste("SVM Test AUC:", round(svm_test_auc, 4)))
+
+# 4. TUNE THE SVM MODEL TO IMPROVE PERFORMANCE
+
+# Define a parameter grid for tuning
+tune_grid <- tune.svm(SOUSED ~ ., data = Train, 
+                      kernel = "radial",
+                      cost = 10^(-1:2),
+                      gamma = 10^(-2:-1),
+                      probability = TRUE)
+
+# Summary of tuning results
+print("SVM Tuning Results:")
+print(tune_grid)
+
+# Best model from tuning
+best_svm_model <- tune_grid$best.model
+
+# Predict on validation set with tuned model
+tuned_svm_valid_pred <- predict(best_svm_model, newdata = Valid, probability = TRUE)
+tuned_svm_valid_probs_attr <- attr(tuned_svm_valid_pred, "probabilities")
+
+# Print probability column names
+print("Probability Column Names (Tuned SVM - Validation Set):")
+print(colnames(tuned_svm_valid_probs_attr))
+
+# Extract probabilities for the positive class
+if(positive_class %in% colnames(tuned_svm_valid_probs_attr)){
+  tuned_svm_valid_probs <- tuned_svm_valid_probs_attr[, positive_class]
+} else {
+  stop(paste("Positive class", positive_class, "not found in tuned SVM validation probability columns."))
+}
+
+# Check for NA probabilities
+if(any(is.na(tuned_svm_valid_probs))){
+  warning("NA values found in Tuned SVM validation probabilities.")
+}
+
+# Convert to binary outcomes
+tuned_svm_valid_pred_classes <- ifelse(tuned_svm_valid_probs > 0.5, positive_class, levels(Train$SOUSED)[1])
+tuned_svm_valid_pred_classes <- factor(tuned_svm_valid_pred_classes, levels = levels(Valid$SOUSED))
+
+# Confusion Matrix
+tuned_svm_valid_conf_matrix <- table(Actual = Valid$SOUSED, Predicted = tuned_svm_valid_pred_classes)
+print("Confusion Matrix - Tuned SVM (Validation Set):")
+print(tuned_svm_valid_conf_matrix)
+
+# Accuracy
+tuned_svm_valid_accuracy <- sum(diag(tuned_svm_valid_conf_matrix)) / sum(tuned_svm_valid_conf_matrix)
+print(paste("Tuned SVM Validation Accuracy:", round(tuned_svm_valid_accuracy, 4)))
+
+# AUC
+tuned_svm_valid_roc <- roc(response = Valid$SOUSED, predictor = tuned_svm_valid_probs, levels = rev(levels(Valid$SOUSED)))
+plot(tuned_svm_valid_roc, main = "ROC Curve for Tuned SVM (Validation Set)", col = "purple", lwd = 2, print.auc = TRUE)
+tuned_svm_valid_auc <- auc(tuned_svm_valid_roc)
+print(paste("Tuned SVM Validation AUC:", round(tuned_svm_valid_auc, 4)))
+
+# Predict on test set with tuned model
+tuned_svm_test_pred <- predict(best_svm_model, newdata = Test, probability = TRUE)
+tuned_svm_test_probs_attr <- attr(tuned_svm_test_pred, "probabilities")
+
+# Print probability column names
+print("Probability Column Names (Tuned SVM - Test Set):")
+print(colnames(tuned_svm_test_probs_attr))
+
+# Extract probabilities for the positive class
+if(positive_class %in% colnames(tuned_svm_test_probs_attr)){
+  tuned_svm_test_probs <- tuned_svm_test_probs_attr[, positive_class]
+} else {
+  stop(paste("Positive class", positive_class, "not found in tuned SVM test probability columns."))
+}
+
+# Check for NA probabilities
+if(any(is.na(tuned_svm_test_probs))){
+  warning("NA values found in Tuned SVM test probabilities.")
+}
+
+# Convert to binary outcomes
+tuned_svm_test_pred_classes <- ifelse(tuned_svm_test_probs > 0.5, positive_class, levels(Train$SOUSED)[1])
+tuned_svm_test_pred_classes <- factor(tuned_svm_test_pred_classes, levels = levels(Test$SOUSED))
+
+# Confusion Matrix
+tuned_svm_test_conf_matrix <- table(Actual = Test$SOUSED, Predicted = tuned_svm_test_pred_classes)
+print("Confusion Matrix - Tuned SVM (Test Set):")
+print(tuned_svm_test_conf_matrix)
+
+# Accuracy
+tuned_svm_test_accuracy <- sum(diag(tuned_svm_test_conf_matrix)) / sum(tuned_svm_test_conf_matrix)
+print(paste("Tuned SVM Test Accuracy:", round(tuned_svm_test_accuracy, 4)))
+
+# AUC
+tuned_svm_test_roc <- roc(response = Test$SOUSED, predictor = tuned_svm_test_probs, levels = rev(levels(Test$SOUSED)))
+plot(tuned_svm_test_roc, main = "ROC Curve for Tuned SVM (Test Set)", col = "purple", lwd = 2, print.auc = TRUE)
+tuned_svm_test_auc <- auc(tuned_svm_test_roc)
+print(paste("Tuned SVM Test AUC:", round(tuned_svm_test_auc, 4)))
+
+# 5. COMPARING PERFORMANCE WITH OTHER MODELS
+
+# Create a summary table
+performance_summary <- data.frame(
+  Model = c("Logit", "Probit", "SVM", "Tuned SVM"),
+  Validation_Accuracy = c(accuracy, probit_accuracy, svm_valid_accuracy, tuned_svm_valid_accuracy),
+  Validation_AUC = c(auc_value, probit_auc_value, svm_valid_auc, tuned_svm_valid_auc),
+  Test_Accuracy = c(logit_test_accuracy, probit_test_accuracy, svm_test_accuracy, tuned_svm_test_accuracy),
+  Test_AUC = c(logit_test_auc, probit_test_auc, svm_test_auc, tuned_svm_test_auc)
+)
+
+print("Performance Summary:")
+print(performance_summary)
+
+# LOAD REQUIRED LIBRARIES
+library(dplyr)
+library(rsample)
+library(rpart)
+library(rpart.plot)
+library(pROC)
+
+# LOADING DATA
+df <- read.csv('https://raw.githubusercontent.com/dikarusli/BUAN-381-Final-Project/refs/heads/main/BUAN-381-Dataset.csv')
+
+# STRATIFIED SAMPLING BASED ON SOUSED
+set.seed(123)
+split <- initial_split(df, prop = 0.7, strata = SOUSED)  # Stratified split with 70% for training
+Train <- training(split)
+Temp <- testing(split)  # Remaining 30% for validation and testing
+
+# Splitting Temp into Validation and Test (50% each)
+set.seed(123)
+temp_split <- initial_split(Temp, prop = 0.5, strata = SOUSED)
+Valid <- training(temp_split)
+Test <- testing(temp_split)
+
+# Ensure SOUSED is treated as a factor for classification tasks
+Train$SOUSED <- as.factor(Train$SOUSED)
+Valid$SOUSED <- as.factor(Valid$SOUSED)
+Test$SOUSED <- as.factor(Test$SOUSED)
+
+# CHECK DIMENSIONS OF DATASETS
+print(dim(Train))
+print(dim(Valid))
+print(dim(Test))
+
+# TRAIN A CLASSIFICATION TREE
+tree_model <- rpart(SOUSED ~ ., data = Train, method = "class")
+
+# VISUALIZE THE TREE
+rpart.plot(tree_model, main = "Classification Tree")
+
+# PREDICT ON VALIDATION SET
+tree_valid_pred <- predict(tree_model, newdata = Valid, type = "prob")
+tree_valid_probs <- tree_valid_pred[, 2]  # Probabilities for the positive class
+tree_valid_pred_classes <- ifelse(tree_valid_probs > 0.5, 1, 0)
+
+# CONFUSION MATRIX FOR VALIDATION SET
+tree_valid_conf_matrix <- table(Valid$SOUSED, tree_valid_pred_classes)
+print("Confusion Matrix - Tree (Validation Set):")
+print(tree_valid_conf_matrix)
+
+# VALIDATION ACCURACY
+tree_valid_accuracy <- sum(diag(tree_valid_conf_matrix)) / sum(tree_valid_conf_matrix)
+print(paste("Tree Validation Accuracy:", round(tree_valid_accuracy, 4)))
+
+# VALIDATION AUC
+tree_valid_roc <- roc(Valid$SOUSED, tree_valid_probs)
+plot(tree_valid_roc, main = "ROC Curve for Classification Tree (Validation Set)", col = "orange", lwd = 2, print.auc = TRUE)
+tree_valid_auc <- auc(tree_valid_roc)
+print(paste("Tree Validation AUC:", round(tree_valid_auc, 4)))
+
+# PREDICT ON TEST SET
+tree_test_pred <- predict(tree_model, newdata = Test, type = "prob")
+tree_test_probs <- tree_test_pred[, 2]  # Probabilities for the positive class
+tree_test_pred_classes <- ifelse(tree_test_probs > 0.5, 1, 0)
+
+# CONFUSION MATRIX FOR TEST SET
+tree_test_conf_matrix <- table(Test$SOUSED, tree_test_pred_classes)
+print("Confusion Matrix - Tree (Test Set):")
+print(tree_test_conf_matrix)
+
+# TEST ACCURACY
+tree_test_accuracy <- sum(diag(tree_test_conf_matrix)) / sum(tree_test_conf_matrix)
+print(paste("Tree Test Accuracy:", round(tree_test_accuracy, 4)))
+
+# TEST AUC
+tree_test_roc <- roc(Test$SOUSED, tree_test_probs)
+plot(tree_test_roc, main = "ROC Curve for Classification Tree (Test Set)", col = "orange", lwd = 2, print.auc = TRUE)
+tree_test_auc <- auc(tree_test_roc)
+print(paste("Tree Test AUC:", round(tree_test_auc, 4)))
+
+# INITIALIZE PERFORMANCE SUMMARY
+performance_summary <- data.frame(
+  Model = character(),
+  Validation_Accuracy = numeric(),
+  Validation_AUC = numeric(),
+  Test_Accuracy = numeric(),
+  Test_AUC = numeric(),
+  stringsAsFactors = FALSE
+)
+
+# ADD CLASSIFICATION TREE RESULTS TO PERFORMANCE SUMMARY
+performance_summary <- rbind(
+  performance_summary,
+  data.frame(
+    Model = "Classification Tree",
+    Validation_Accuracy = tree_valid_accuracy,
+    Validation_AUC = tree_valid_auc,
+    Test_Accuracy = tree_test_accuracy,
+    Test_AUC = tree_test_auc
+  )
+)
+
+# PRINT UPDATED PERFORMANCE SUMMARY
+print("Updated Performance Summary:")
+print(performance_summary)
+x
