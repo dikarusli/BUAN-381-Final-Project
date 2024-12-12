@@ -1,0 +1,100 @@
+library(dplyr)
+library(caret)      # For confusionMatrix() and data partitioning
+library(broom)      # For glance() and tidy()
+library(MASS)       # For lm.ridge()
+library(ggplot2)    # For ggplot()
+library(mgcv)       # For gam()
+library(rsample)    # For initial_split() stratified random sampling
+library(e1071)      # SVM library
+library(pROC)       # For ROC and AUC
+library(tidymodels) # For ROC curve plotting with yardstick
+
+df <- read.csv('https://raw.githubusercontent.com/dikarusli/BUAN-381-Final-Project/refs/heads/main/BUAN-381-Dataset.csv')
+
+# Convert the response variable 'SOUSED' to a factor
+df$SOUSED <- factor(df$SOUSED, levels = c(0, 1), labels = c("No", "Yes"))
+
+# Quick Data Analysis
+print(colnames(df))
+print(anyNA(df))
+summary(df)
+
+# Correlation analysis
+numeric_vars <- df %>% select_if(is.numeric)
+cor_matrix <- cor(numeric_vars)
+print(cor_matrix)
+
+# Set the seed for reproducibility
+set.seed(123)
+
+split <- initial_split(df, prop = 0.7, strata = SOUSED)
+Train <- training(split)
+Temp <- testing(split)
+
+# Temp into Validation and Test sets (each 15% of the total data)
+validation_test_split <- initial_split(Temp, prop = 0.5, strata = SOUSED)
+Valid <- training(validation_test_split)
+Test <- testing(validation_test_split)
+
+# Dimensions of partitioned data
+print(dim(Train))
+print(dim(Valid))
+print(dim(Test))
+
+# Logistic regression model using the training set
+logit_model <- glm(SOUSED ~ ., data = Train, family = binomial(link = "logit"))
+
+# Summary of the logit model
+summary(logit_model)
+
+# Predict probabilities on the validation set
+valid_logit_probs <- predict(logit_model, newdata = Valid, type = "response")
+
+# Convert probabilities to binary outcomes using a 0.5 threshold
+valid_logit_pred <- ifelse(valid_logit_probs > 0.5, "Yes", "No")
+valid_logit_pred <- factor(valid_logit_pred, levels = c("No", "Yes"))
+
+# Confusion Matrix using caret
+conf_matrix_logit <- confusionMatrix(valid_logit_pred, Valid$SOUSED, positive = "Yes")
+print(conf_matrix_logit)
+
+# ROC Curve and AUC for Logit Model
+roc_logit <- roc(Valid$SOUSED, valid_logit_probs, levels = c("No", "Yes"))
+plot(roc_logit, main = "ROC Curve for Logistic Regression (Logit)", col = "blue", lwd = 2)
+auc_logit <- auc(roc_logit)
+print(paste("Logit Validation AUC:", round(auc_logit, 3)))
+
+# Build the probit regression model using the training set
+probit_model <- glm(SOUSED ~ ., data = Train, family = binomial(link = "probit"))
+
+# Summary of the probit model
+summary(probit_model)
+
+# Predict probabilities on the validation set using the probit model
+valid_probit_probs <- predict(probit_model, newdata = Valid, type = "response")
+
+# Convert probabilities to binary outcomes using a 0.5 threshold
+valid_probit_pred <- ifelse(valid_probit_probs > 0.5, "Yes", "No")
+valid_probit_pred <- factor(valid_probit_pred, levels = c("No", "Yes"))
+
+# Confusion Matrix using caret for Probit Model
+conf_matrix_probit <- confusionMatrix(valid_probit_pred, Valid$SOUSED, positive = "Yes")
+print(conf_matrix_probit)
+
+# ROC Curve and AUC for Probit Model
+roc_probit <- roc(Valid$SOUSED, valid_probit_probs, levels = c("No", "Yes"))
+plot(roc_probit, main = "ROC Curve for Probit Model", col = "red", lwd = 2)
+auc_probit <- auc(roc_probit)
+print(paste("Probit Validation AUC:", round(auc_probit, 3)))
+
+test_logit_probs <- predict(logit_model, newdata = Test, type = "response")
+test_logit_pred <- ifelse(test_logit_probs > 0.5, "Yes", "No")
+test_logit_pred <- factor(test_logit_pred, levels = c("No", "Yes"))
+
+conf_matrix_test_logit <- confusionMatrix(test_logit_pred, Test$SOUSED, positive = "Yes")
+print(conf_matrix_test_logit)
+
+roc_test_logit <- roc(Test$SOUSED, test_logit_probs, levels = c("No", "Yes"))
+plot(roc_test_logit, main = "ROC Curve for Logit Model on Test Set", col = "green", lwd = 2)
+auc_test_logit <- auc(roc_test_logit)
+print(paste("Logit Test AUC:", round(auc_test_logit, 3)))
