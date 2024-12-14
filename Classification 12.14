@@ -295,3 +295,42 @@ roc_test_rf <- roc(Test$SOUSED, test_rf_probs, levels = c("No", "Yes"))
 plot(roc_test_rf, main = "ROC Curve for Random Forest on Test Set", col = "blue", lwd = 2)
 auc_test_rf <- auc(roc_test_rf)
 print(paste("Random Forest Test AUC:", round(auc_test_rf, 3)))
+
+######################## VISUALS
+
+library(ggcorrplot)
+numeric_vars <- df %>% select_if(is.numeric)
+cor_matrix <- cor(numeric_vars, use = "complete.obs")
+ggcorrplot(cor_matrix, method = "circle", type = "lower", lab = TRUE, 
+           title = "Correlation Matrix Heatmap", colors = c("red", "white", "blue"))
+
+ggplot(df, aes(x = SOUSED)) +
+  geom_bar(fill = "steelblue") +
+  labs(title = "Class Distribution of Solar Usage", x = "Solar Usage", y = "Count")
+
+# Combine ROC Curves for Logistic, Probit, SVM, Classification Tree, and Random Forest
+plot(roc_logit, col = "blue", main = "ROC Curves for Classification Models", lwd = 2)
+lines(roc_probit, col = "red", lwd = 2)
+lines(roc_svm, col = "purple", lwd = 2)
+lines(roc_tree, col = "orange", lwd = 2)
+lines(roc_rf, col = "green", lwd = 2)
+legend("bottomright", legend = c("Logistic", "Probit", "SVM", "Tree", "Random Forest"), 
+       col = c("blue", "red", "purple", "orange", "green"), lty = 1, lwd = 2)
+
+varImpPlot(rf_model, main = "Random Forest Feature Importance")
+
+rpart.plot(tree_model, main = "Classification Tree", type = 2, extra = 104)
+
+library(precrec)
+pr <- evalmod(scores = valid_logit_probs, labels = as.numeric(Valid$SOUSED) - 1)
+autoplot(pr)
+
+library(ggplot2)
+cm <- as.data.frame(conf_matrix_logit$table)
+ggplot(cm, aes(Prediction, Reference, fill = Freq)) +
+  geom_tile() +
+  geom_text(aes(label = Freq), color = "white") +
+  labs(title = "Confusion Matrix Heatmap", x = "Predicted", y = "Actual")
+
+cor_target <- cor(numeric_vars, as.numeric(df$SOUSED) - 1, use = "complete.obs")
+barplot(cor_target, main = "Correlation with Target", las = 2)
