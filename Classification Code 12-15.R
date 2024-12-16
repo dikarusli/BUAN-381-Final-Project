@@ -118,7 +118,7 @@ M1_Logit_Actual_Valid <- factor(Valid$SOUSED == 1, levels = c(FALSE, TRUE))
 View(M1_Logit_BinPred_Train)
 View(M1_Logit_BinPred_Valid)
 
-  
+
 ###columns are ACTUAL values (including type 1 and type 2 error): 184 students are ACTUALLY rejected and 96 are ACTUALLY accepted
 ###rows is how many we SHOULD admit/reject according to our prediction
 
@@ -281,7 +281,11 @@ print(SVM_Model) #DIAGNOSTIC SUMMARY
 
 #REPORT IN AND OUT-OF-SAMPLE ERRORS (1-ACCURACY)
 (E_IN_PRETUNE<-1-mean(predict(SVM_Model, Train)==Train$SOUSED))
-(E_OUT_PRETUNE<-1-mean(predict(SVM_Model, Test)==Test$SOUSED))
+(E_OUT_PRETUNE<-1-mean(predict(SVM_Model, Valid)==Valid$SOUSED))
+
+SVM_CM_IN<-mean(predict(SVM_Model, Train)==Train$SOUSED)
+SVM_CM_OUT<-mean(predict(SVM_Model, Valid)==Valid$SOUSED)
+
 
 #TUNING THE SVM BY CROSS-VALIDATION
 tune_control<-tune.control(cross=10) #SET K-FOLD CV PARAMETERS
@@ -316,10 +320,12 @@ print(SVM_Retune) #DIAGNOSTIC SUMMARY
 
 
 (E_IN_PRETUNE<-1-mean(predict(SVM_Model, Train)==Train$SOUSED))
-(E_OUT_PRETUNE<-1-mean(predict(SVM_Model, Test)==Test$SOUSED))
+(E_OUT_PRETUNE<-1-mean(predict(SVM_Model, Valid)==Valid$SOUSED))
 (E_IN_RETUNE<-1-mean(predict(SVM_Retune, Train)==Train$SOUSED))
 (E_OUT_RETUNE<-1-mean(predict(SVM_Retune, Valid)==Valid$SOUSED))
 
+SVM_TUNED_CM_IN<-mean(predict(SVM_Retune, Train)==Train$SOUSED)
+SVM_TUNED_CM_OUT<-mean(predict(SVM_Retune, Valid)==Valid$SOUSED)
 
 ########################################
 ####### 9.b. CLASSIFICATION TREE #######
@@ -343,7 +349,7 @@ pred_class_in <- predict(default_tree, new_data = Train, type="class") %>%
 #GENERATE IN-SAMPLE CONFUSION MATRIX AND DIAGNOSTICS
 confusion <- table(pred_class_in$.pred_class, pred_class_in$SOUSED)
 View(confusion)
-confusionMatrix(confusion) #FROM CARET PACKAGE
+Tree_CM_IN<-confusionMatrix(confusion) #FROM CARET PACKAGE
 
 #GENERATE OUT-OF-SAMPLE PREDICTIONS ON THE TEST SET AND COMBINE WITH TEST DATA
 pred_class_out <- predict(default_tree, new_data = Valid, type="class") %>%
@@ -351,7 +357,7 @@ pred_class_out <- predict(default_tree, new_data = Valid, type="class") %>%
 
 #GENERATE OUT-OF-SAMPLE CONFUSION MATRIX AND DIAGNOSTICS
 confusion <- table(pred_class_out$.pred_class, pred_class_out$SOUSED)
-confusionMatrix(confusion) #FROM CARET PACKAGE
+Tree_CM_OUT<-confusionMatrix(confusion) #FROM CARET PACKAGE
 
 # #GENERATE ROC CURVE AND COMPUTE AUC OVER ALL TRUE / FALSE +'s
 # autoplot(roc_curve(pred_class_in, estimate=.pred_1, truth=SOUSED))
@@ -395,7 +401,7 @@ pred_class_in <- predict(final_model, new_data = Train, type="class") %>%
 
 #GENERATE IN-SAMPLE CONFUSION MATRIX AND DIAGNOSTICS
 confusion <- table(pred_class_in$.pred_class, pred_class_in$SOUSED)
-confusionMatrix(confusion) #FROM CARET PACKAGE
+Tree_TUNED_CM_IN<-confusionMatrix(confusion) #FROM CARET PACKAGE
 
 #GENERATE OUT-OF-SAMPLE PREDICTIONS ON THE TEST SET AND COMBINE WITH TEST DATA
 pred_class_out <- predict(final_model, new_data = Valid, type="class") %>%
@@ -403,7 +409,7 @@ pred_class_out <- predict(final_model, new_data = Valid, type="class") %>%
 
 #GENERATE OUT-OF-SAMPLE CONFUSION MATRIX AND DIAGNOSTICS
 confusion <- table(pred_class_out$.pred_class, pred_class_out$SOUSED)
-confusionMatrix(confusion) #FROM CARET PACKAGE
+Tree_TUNED_CM_OUT<-confusionMatrix(confusion) #FROM CARET PACKAGE
 
 ################################################################################
 # #generating predicted probabilities
@@ -479,7 +485,7 @@ pred_class_bf_in <- predict(bagged_forest, new_data = Train, type="class") %>%
 
 #GENERATE IN-SAMPLE CONFUSION MATRIX AND DIAGNOSTICS
 confusion <- table(pred_class_bf_in$.pred_class, pred_class_bf_in$SOUSED)
-confusionMatrix(confusion) #FROM CARET PACKAGE
+BF_CM_IN<-confusionMatrix(confusion) #FROM CARET PACKAGE
 
 #GENERATE OUT-OF-SAMPLE PREDICTIONS ON THE TEST SET AND COMBINE WITH TEST DATA
 pred_class_bf_out <- predict(bagged_forest, new_data = Valid, type="class") %>%
@@ -487,7 +493,7 @@ pred_class_bf_out <- predict(bagged_forest, new_data = Valid, type="class") %>%
 
 #GENERATE OUT-OF-SAMPLE CONFUSION MATRIX AND DIAGNOSTICS
 confusion <- table(pred_class_bf_out$.pred_class, pred_class_bf_out$SOUSED)
-confusionMatrix(confusion) #FROM CARET PACKAGE
+BF_CM_OUT<-confusionMatrix(confusion) #FROM CARET PACKAGE
 
 
 ###################################################################
@@ -528,7 +534,7 @@ pred_class_in <- predict(final_model, new_data = Train, type="class") %>%
 
 #GENERATE IN-SAMPLE CONFUSION MATRIX AND DIAGNOSTICS
 confusion <- table(pred_class_in$.pred_class, pred_class_in$SOUSED)
-confusionMatrix(confusion) #FROM CARET PACKAGE
+BF_TUNED_CM_IN<-confusionMatrix(confusion) #FROM CARET PACKAGE
 
 #GENERATE OUT-OF-SAMPLE PREDICTIONS ON THE TEST SET AND COMBINE WITH TEST DATA
 pred_class_out <- predict(final_model, new_data = Valid, type="class") %>%
@@ -536,7 +542,7 @@ pred_class_out <- predict(final_model, new_data = Valid, type="class") %>%
 
 #GENERATE OUT-OF-SAMPLE CONFUSION MATRIX AND DIAGNOSTICS
 confusion <- table(pred_class_out$.pred_class, pred_class_out$SOUSED)
-confusionMatrix(confusion) #FROM CARET PACKAGE
+BF_TUNED_CM_OUT<-confusionMatrix(confusion) #FROM CARET PACKAGE
 
 ##############################################
 ######## Additional Visualizations  ##########
@@ -627,3 +633,13 @@ p_rocs
 # Print distributions
 p_nwker_dist
 p_mfexp_dist
+
+View(SVM_CM_IN)
+###8. DATA TABLE###
+TABLE_VAL_1 <- as.table(matrix(c(
+  M1_Logit_CM_IN$overall['Accuracy'], M1_Probit_CM_IN$overall['Accuracy'], SVM_CM_IN, SVM_TUNED_CM_IN, Tree_CM_IN$overall['Accuracy'], Tree_TUNED_CM_IN$overall['Accuracy'], BF_CM_IN$overall['Accuracy'], BF_TUNED_CM_IN$overall['Accuracy'],
+  M1_Logit_CM_OUT$overall['Accuracy'], M1_Probit_CM_OUT$overall['Accuracy'], SVM_CM_OUT, SVM_TUNED_CM_OUT, Tree_CM_OUT$overall['Accuracy'], Tree_TUNED_CM_OUT$overall['Accuracy'], BF_CM_IN$overall['Accuracy'], BF_TUNED_CM_IN$overall['Accuracy']), 
+  ncol=8, byrow=TRUE))
+colnames(TABLE_VAL_1) <- c('Logit', 'Probit','SVM','SVM Tuned','Tree','Tree Tuned','Bagged Forest','Bagged Forest Tuned')
+rownames(TABLE_VAL_1) <- c('Accuracy_IN', 'Accuracy_OUT')
+TABLE_VAL_1 #REPORT OUT-OF-SAMPLE ERRORS FOR BOTH HYPOTHESIS
