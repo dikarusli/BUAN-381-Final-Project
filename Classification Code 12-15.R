@@ -538,14 +538,92 @@ pred_class_out <- predict(final_model, new_data = Valid, type="class") %>%
 confusion <- table(pred_class_out$.pred_class, pred_class_out$SOUSED)
 confusionMatrix(confusion) #FROM CARET PACKAGE
 
+##############################################
+######## Additional Visualizations  ##########
+##############################################
 
+library(ggcorrplot)
+library(patchwork)
 
+# 1. Correlation Heatmap for Numeric Variables
+# Extract numeric columns only
+numeric_cols <- df %>% select_if(is.numeric)
+corr_matrix <- cor(numeric_cols, use = "complete.obs")
+p_corr <- ggcorrplot(corr_matrix, method = "circle", type = "lower", 
+                     lab = TRUE, lab_size = 3, 
+                     title = "Correlation Heatmap of Numeric Features",
+                     ggtheme = ggplot2::theme_minimal())
 
+# 2. Class Distribution Bar Plot for SOUSED
+p_soused_dist <- ggplot(df, aes(x=SOUSED)) +
+  geom_bar(fill="steelblue") +
+  theme_minimal() +
+  labs(title="Class Distribution of SOUSED",
+       x="SOUSED (0=No, 1=Yes)", y="Count")
 
+# 3. ROC Curves for Logistic and Probit Models
+# Using previously computed roc objects: Logit_ROC_IN, Logit_ROC_OUT, Probit_ROC_IN, Probit_ROC_OUT
+# We can convert these objects into data frames for ggplot.
+roc_to_df <- function(roc_obj) {
+  coords <- coords(roc_obj, "all", ret=c("specificity","sensitivity"))
+  data.frame(Specificity=coords$specificity, Sensitivity=coords$sensitivity)
+}
 
+logit_in_df <- roc_to_df(Logit_ROC_IN)
+logit_out_df <- roc_to_df(Logit_ROC_OUT)
+probit_in_df <- roc_to_df(Probit_ROC_IN)
+probit_out_df <- roc_to_df(Probit_ROC_OUT)
 
+p_logit_roc_in <- ggplot(logit_in_df, aes(x=1-Specificity, y=Sensitivity)) +
+  geom_line(color="blue") + 
+  geom_abline(linetype="dashed") +
+  theme_minimal() +
+  labs(title=paste("Logit Model IN ROC Curve (AUC:", round(auc(Logit_ROC_IN),3),")"),
+       x="False Positive Rate", y="True Positive Rate")
 
+p_logit_roc_out <- ggplot(logit_out_df, aes(x=1-Specificity, y=Sensitivity)) +
+  geom_line(color="red") + 
+  geom_abline(linetype="dashed") +
+  theme_minimal() +
+  labs(title=paste("Logit Model OUT ROC Curve (AUC:", round(auc(Logit_ROC_OUT),3),")"),
+       x="False Positive Rate", y="True Positive Rate")
 
+p_probit_roc_in <- ggplot(probit_in_df, aes(x=1-Specificity, y=Sensitivity)) +
+  geom_line(color="blue") + 
+  geom_abline(linetype="dashed") +
+  theme_minimal() +
+  labs(title=paste("Probit Model IN ROC Curve (AUC:", round(auc(Probit_ROC_IN),3),")"),
+       x="False Positive Rate", y="True Positive Rate")
 
+p_probit_roc_out <- ggplot(probit_out_df, aes(x=1-Specificity, y=Sensitivity)) +
+  geom_line(color="red") + 
+  geom_abline(linetype="dashed") +
+  theme_minimal() +
+  labs(title=paste("Probit Model OUT ROC Curve (AUC:", round(auc(Probit_ROC_OUT),3),")"),
+       x="False Positive Rate", y="True Positive Rate")
 
+# Combine the four ROC plots using patchwork
+p_rocs <- (p_logit_roc_in + p_logit_roc_out) / (p_probit_roc_in + p_probit_roc_out)
 
+# 4. Distribution of Key Predictors (e.g., NWKER and MFEXP)
+p_nwker_dist <- ggplot(df, aes(x=NWKER)) +
+  geom_histogram(bins=30, fill="darkgreen", color="white") +
+  theme_minimal() +
+  labs(title="Distribution of NWKER", x="NWKER", y="Count")
+
+p_mfexp_dist <- ggplot(df, aes(x=MFEXP)) +
+  geom_histogram(bins=30, fill="purple", color="white") +
+  theme_minimal() +
+  labs(title="Distribution of MFEXP", x="MFEXP", y="Count")
+
+# Print out or save the plots
+# Example: print correlation heatmap and class dist side by side
+p_corr
+p_soused_dist
+
+# Print ROC plots
+p_rocs
+
+# Print distributions
+p_nwker_dist
+p_mfexp_dist
